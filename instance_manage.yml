@@ -1,0 +1,90 @@
+---
+#
+# Manages the state of the instances by specifying a tag, e.g.
+#
+# ansible-playbook -i <inventory> instance_manage.yml --tags stop
+#
+# Tag options:
+#
+#   stop: stop the instances
+#   start: start instances
+#   delete: delete instances and all resources associated with the instances:
+#
+- name: Manage instances (note use of tags "stop," "start," and "delete")
+  hosts: "{{ hostlist | default('all') }}"
+  gather_facts: False
+
+  tasks:
+
+    - name: stop instances
+      azure.azcollection.azure_rm_virtualmachine:
+        resource_group: "{{ item.resource_group }}"
+        name: "{{ item.name }}"
+        state: present
+        started: no
+      loop: "{{ azure_virtualmachines }}"
+      tags:
+        - never
+        - stop
+
+    - name: start instances
+      azure.azcollection.azure_rm_virtualmachine:
+        resource_group: "{{ item.resource_group }}"
+        name: "{{ item.name }}"
+        state: present
+        started: yes
+      loop: "{{ azure_virtualmachines }}"
+      tags:
+        - never
+        - start
+
+    - name: delete resources associated with the instances
+      block:
+
+        - name: delete the instances
+          azure.azcollection.azure_rm_virtualmachine:
+            resource_group: "{{ item.resource_group }}"
+            name: "{{ item.name }}"
+            state: absent
+#            remove_on_absent: all_autocreated
+            remove_on_absent: all
+          loop: "{{ azure_virtualmachines }}"
+
+#        - name: Create virtual network interface card
+#          azure.azcollection.azure_rm_networkinterface:
+#            resource_group: "{{ outer_item.resource_group }}"
+#            name: "{{ item.name }}"
+#            virtual_network: "{{ azure_virtnetwork }}"
+#            subnet: "{{ azure_subnet }}"
+#            ip_configurations: "{{ item.ip_configurations }}"
+#            security_group: "{{ azure_securitygroup }}"
+#          loop: "{{ outer_item.network_interfaces }}"
+#          register: network_iface_output
+
+        - name: delete the Network Security Group
+          azure.azcollection.azure_rm_securitygroup:
+            resource_group: "{{ azure_resourcegroup }}"
+            name: "{{ azure_securitygroup }}"
+            state: absent
+
+        - name: delete the subnet
+          azure.azcollection.azure_rm_subnet:
+            resource_group: "{{ azure_resourcegroup }}"
+            name: "{{ azure_subnet }}"
+            virtual_network: "{{ azure_virtnetwork }}"
+            state: absent
+
+        - name: delete the virtual network
+          azure.azcollection.azure_rm_virtualnetwork:
+            resource_group: "{{ azure_resourcegroup }}"
+            name: "{{ azure_virtnetwork }}"
+            state: absent
+
+        - name: cleanout previous dynamic inventory file
+          file:
+            path: "{{ aws_inventory_file }}"
+            state: absent
+          when: aws_inventory_file is defined
+      tags:
+        - never
+        - delete

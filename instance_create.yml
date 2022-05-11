@@ -1,0 +1,143 @@
+---
+- name: Create Azure VM
+  hosts: "{{ hostlist | default('all') }}"
+
+  tasks:
+  - name: Create resource group
+    azure.azcollection.azure_rm_resourcegroup:
+      name: "{{ azure_resourcegroup }}"
+      location: "{{ azure_location }}"
+
+  - name: Create virtual network
+    azure.azcollection.azure_rm_virtualnetwork:
+      resource_group: "{{ azure_resourcegroup }}"
+      name: "{{ azure_virtnetwork }}"
+      address_prefixes: "{{ azure_virtnetwork_prefixes }}"
+
+  - name: Add subnet
+    azure.azcollection.azure_rm_subnet:
+      resource_group: "{{ azure_resourcegroup }}"
+      name: "{{ azure_subnet }}"
+      address_prefix: "{{ azure_subnet_prefix }}"
+      virtual_network: "{{ azure_virtnetwork }}"
+
+  - name: Create Network Security Group
+    azure.azcollection.azure_rm_securitygroup:
+      resource_group: "{{ azure_resourcegroup }}"
+      name: "{{ azure_securitygroup }}"
+      rules: "{{ azure_securitygroup_rules }}"
+
+  - name: cleanout previous dynamic inventory file
+    file:
+      path: "{{ azure_inventory_file }}"
+      state: absent
+    when: azure_inventory_file is defined
+
+  - name: Loop over the tasks file that will create the vm's
+    include_tasks: instance_create_tasks.yml
+    loop: "{{ azure_virtualmachines }}"
+    loop_control:
+      label: "{{ outer_item.name }}"
+      loop_var: outer_item
+
+- name: Play to test connectivity to newly-created instances and to update Windows password
+  hosts: launched
+  gather_facts: false
+
+  tasks:
+
+    - name: Print name of host
+      debug:
+        msg: "Working on host {{ inventory_hostname }} with os type of {{ hostvars[inventory_hostname]['specified_os_type'] }}"
+
+    - name: Print all host variables
+      debug:
+        msg: "{{ inventory_hostname }} host variables {{ hostvars[inventory_hostname] }}"
+        verbosity: 1
+
+#
+# Could use module wait_for_connection.  It supports both Linux and Windows targets but uses ping/win_ping
+#
+
+    - name: Wait for SSH port to be open
+      wait_for:
+        delay: 10
+        host: "{{ inventory_hostname }}"
+        port: 22
+        state: started
+        timeout: 320
+      when: hostvars[inventory_hostname]['specified_os_type'] == "Linux"
+
+    - name: Wait for WinRM-HTTPS port to be open
+      win_wait_for:
+        delay: 10
+        host: "{{ inventory_hostname }}"
+        port: 5986
+        state: started
+        timeout: 320
+      when: hostvars[inventory_hostname]['specified_os_type'] == "Windows"
+
+    - name: Run ping
+      ping:
+      when: hostvars[inventory_hostname]['specified_os_type'] == "Linux"
+
+    - name: Run win_ping
+      win_ping:
+      when: hostvars[inventory_hostname]['specified_os_type'] == "Windows"
+
+    - name: Gather facts for Linux systems
+      setup:
+      when: hostvars[inventory_hostname]['specified_os_type'] == "Linux"
+
+    - name: Print ansible_facts
+      debug:
+        var: ansible_facts
+        verbosity: 1
+
+    - name: Block to disable AWS RHUI and to set the hostname for RedHat systems
+      block:
+
+        - name: Ensure the Azure client is removed
+          yum:
+            name: "rhui-azure-rhel*"
+            state: absent
+
+        - name: Ensure yum plugin configuration is correct
+          copy:
+            dest: /etc/yum/pluginconf.d/product-id.conf
+            src: files/product-id.conf
+
+        - name: Ensure subscription-manager can manage repos, i.e. - use content outside of RHUI
+          command: subscription-manager config --rhsm.manage_repos=1
+
+        - name: Print the hostname
+          debug:
+            msg: "Setting the hostname to {{ inventory_hostname }}"
+          when: hostvars[inventory_hostname]['define_hostname']
+
+        - name: Update the hostname
+          command: "hostnamectl set-hostname {{ inventory_hostname }}"
+          when: hostvars[inventory_hostname]['define_hostname']
+
+#        - name: Update the hostname
+#          ansible.builtin.hostname:
+#            name: "{{ inventory_hostname }}"
+#            use: redhat
+
+        - name: Print a message about updating /etc/hosts
+          debug:
+            msg: "Updating the localhost entry in /etc/hosts to include the hostname - {{ inventory_hostname }}"
+          when: hostvars[inventory_hostname]['update_etchosts_localhost']
+
+        - name: Update /etc/hosts file for Satellite
+          ansible.builtin.lineinfile:
+            line: "127.0.0.1   {{ inventory_hostname }} localhost localhost.localdomain localhost4 localhost4.localdomain4"
+            path: /etc/hosts
+            regexp: "^127.0.0.1"
+            state: present
+          when: hostvars[inventory_hostname]['update_etchosts_localhost']
+
+      when: ansible_facts['distribution'] is defined and ansible_facts['distribution'] == "RedHat"
+      become: True
+#     End block for RedHat systems
+#     Reference:  https://access.redhat.com/documentation/en-us/red_hat_satellite/6.3/html/installation_guide/running_red_hat_satellite_on_amazon_web_services
