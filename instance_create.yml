@@ -49,15 +49,18 @@
         timeout: 320
       when: hostvars[inventory_hostname]['specified_os_type'] == "Linux"
 
-    - name: Wait for WinRM-HTTPS port to be open
+#    - name: Wait for WinRM-HTTPS port to be open
 #      win_wait_for:
-      wait_for:
-        delay: 10
-        host: "{{ inventory_hostname }}"
-        port: 5986
-        state: started
+#        delay: 10
+#        host: "{{ inventory_hostname }}"
+#        port: 5986
+#        state: started
+#        timeout: 320
+#      when: hostvars[inventory_hostname]['specified_os_type'] == "Windows"
+
+    - name: Wait for connection to be open
+      wait_for_connection:
         timeout: 320
-      when: hostvars[inventory_hostname]['specified_os_type'] == "Windows"
 
     - name: Run ping
       ping:
