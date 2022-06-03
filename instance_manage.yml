@@ -13,6 +13,11 @@
 - name: Manage instances (note use of tags "stop," "start," and "delete")
   hosts: "{{ hostlist | default('all') }}"
   gather_facts: False
+  environment:
+    AZURE_SUBSCRIPTION_ID: "{{ azure_subscription_id }}"
+    AZURE_CLIENT_ID: "{{ azure_client_id }}"
+    AZURE_SECRET: "{{ azure_password }}"
+    AZURE_TENANT: "{{ azure_tenant_id }}"
 
   tasks:
 

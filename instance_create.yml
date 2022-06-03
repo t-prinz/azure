@@ -1,32 +1,13 @@
 ---
 - name: Create Azure VM
   hosts: "{{ hostlist | default('all') }}"
+  environment:
+    AZURE_SUBSCRIPTION_ID: "{{ azure_subscription_id }}"
+    AZURE_CLIENT_ID: "{{ azure_client_id }}"
+    AZURE_SECRET: "{{ azure_password }}"
+    AZURE_TENANT: "{{ azure_tenant_id }}"
 
   tasks:
-  - name: Create resource group
-    azure.azcollection.azure_rm_resourcegroup:
-      name: "{{ azure_resourcegroup }}"
-      location: "{{ azure_location }}"
-
-  - name: Create virtual network
-    azure.azcollection.azure_rm_virtualnetwork:
-      resource_group: "{{ azure_resourcegroup }}"
-      name: "{{ azure_virtnetwork }}"
-      address_prefixes: "{{ azure_virtnetwork_prefixes }}"
-
-  - name: Add subnet
-    azure.azcollection.azure_rm_subnet:
-      resource_group: "{{ azure_resourcegroup }}"
-      name: "{{ azure_subnet }}"
-      address_prefix: "{{ azure_subnet_prefix }}"
-      virtual_network: "{{ azure_virtnetwork }}"
-
-  - name: Create Network Security Group
-    azure.azcollection.azure_rm_securitygroup:
-      resource_group: "{{ azure_resourcegroup }}"
-      name: "{{ azure_securitygroup }}"
-      rules: "{{ azure_securitygroup_rules }}"
-
   - name: cleanout previous dynamic inventory file
     file:
       path: "{{ azure_inventory_file }}"
@@ -69,7 +50,8 @@
       when: hostvars[inventory_hostname]['specified_os_type'] == "Linux"
 
     - name: Wait for WinRM-HTTPS port to be open
-      win_wait_for:
+#      win_wait_for:
+      wait_for:
         delay: 10
         host: "{{ inventory_hostname }}"
         port: 5986

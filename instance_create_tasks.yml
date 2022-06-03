@@ -37,6 +37,18 @@
     started: yes
   register: instance_info
 
+- name: Create Azure VM Extension to enable HTTPS WinRM listener
+  azure.azcollection.azure_rm_virtualmachineextension:
+    name: winrm-extension
+    resource_group: "{{ outer_item.resource_group }}"
+    virtual_machine_name: "{{ outer_item.name }}"
+    publisher: Microsoft.Compute
+    virtual_machine_extension_type: CustomScriptExtension
+    type_handler_version: '1.9'
+    settings: '{"fileUris": ["https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1"],"commandToExecute": "powershell -ExecutionPolicy Unrestricted -File ConfigureRemotingForAnsible.ps1"}'
+    auto_upgrade_minor_version: true
+  when: outer_item.instance_os_type == 'Windows'
+
 - name: Print instance_info
   debug:
     var: instance_info.changed
@@ -103,8 +115,16 @@
 - name: add instances to the dynamic inventory file
   lineinfile:
     create: True
-    line: "{{ fqdn }} specified_os_type={{ outer_item.instance_os_type }} {{ common_linux_hostvars if (outer_item.instance_os_type == 'Linux') else common_windows_hostvars }}"
+    line: "{{ outer_item.name }} ansible_host={{ fqdn }} specified_os_type={{ outer_item.instance_os_type }} {{ common_linux_hostvars if (outer_item.instance_os_type == 'Linux') else common_windows_hostvars }}"
     mode: "0644"
     path: "{{ azure_inventory_file }}"
     state: present
   when: azure_inventory_file is defined
+
+- name: Delete Azure VM Extension to enable HTTPS WinRM listener
+  azure_rm_virtualmachineextension:
+    name: winrm-extension
+    resource_group: "{{ outer_item.resource_group }}"
+    virtual_machine_name: "{{ outer_item.name }}"
+    state: absent
+  when: outer_item.instance_os_type == 'Windows'
