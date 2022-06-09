@@ -20,3 +20,7 @@ Add a new firewall rule
 
 port=5986
 netsh advfirewall firewall add rule name="Windows Remote Management (HTTPS-In)" dir=in action=allow protocol=TCP localport=$port
+
+To install WSUS
+
+Install-WindowsFeature --ConfigurationFilePath

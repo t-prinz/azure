@@ -110,6 +110,7 @@
     specified_os_type: "{{ outer_item.instance_os_type }}"
     define_hostname: "{{ outer_item.define_hostname }}"
     update_etchosts_localhost: "{{ outer_item.update_etchosts_localhost }}"
+    ansible_winrm_server_cert_validation: ignore
 #  when: instance_info.changed
 
 - name: add instances to the dynamic inventory file
